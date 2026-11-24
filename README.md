@@ -66,15 +66,3 @@ docs/                the website (also what GitHub Pages serves)
 | GET    | `/api/loans`      | user  | own loans (admin: all loans)  |
 | POST   | `/api/loans`      | user  | `{ amount, months, purpose }` |
 | PATCH  | `/api/loans/:id`  | admin | `{ status: "approved" \| "rejected", note }` |
-
-## Hosting on GitHub Pages
-
-GitHub Pages can only host **static files**. It cannot run `server.js`, so it cannot write to `db.json`. The site handles this by itself: when it can't find the server, it runs in **demo mode** and keeps the same JSON database in the browser's `localStorage`. Everything still works (sign up, log in, apply, admin approve/reject), but the data only lives in that browser. The footer shows which mode is active.
-
-1. Push the code to GitHub (`git push`).
-2. On GitHub, open the repo → **Settings** → **Pages**.
-3. Under **Build and deployment**, set **Source** to **Deploy from a branch**.
-4. Set **Branch** to `main` and the folder to **`/docs`**, then click **Save**.
-5. Wait 1–2 minutes and refresh. The site is live at **https://miniturb0.github.io/LoanWeb/**.
-
-To host the full version, with the real JSON file database shared by all users, deploy the Node server to a host such as Render (Web Service: build `npm install`, start `npm start`). Free hosts often reset files when the server restarts, so for permanent data you would add a persistent disk or a real database.
