@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoanWeb · Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="d-flex flex-column min-vh-100 bg-body-tertiary">
+  <nav id="nav"></nav>
+  <main class="container py-4">
+    <nav id="breadcrumb"></nav>
+    <h1 class="fw-bold">Loan applications</h1>
+    <p class="text-body-secondary">Review applications and approve or reject them. You can add a note that the applicant will see.</p>
+
+    <div class="row g-3 mb-4" id="stats"></div>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <ul class="nav nav-pills" id="filters">
+        <li class="nav-item"><button class="nav-link active" data-f="pending">Pending</button></li>
+        <li class="nav-item"><button class="nav-link" data-f="approved">Approved</button></li>
+        <li class="nav-item"><button class="nav-link" data-f="rejected">Rejected</button></li>
+        <li class="nav-item"><button class="nav-link" data-f="all">All</button></li>
+      </ul>
+      <div id="msg" hidden></div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Applicant</th><th>Purpose</th><th class="text-end">Amount</th><th class="text-end">Period</th><th class="text-end">Monthly</th><th class="text-end">Eff. rate</th><th class="text-end">Total cost</th><th>Applied</th><th>Status / action</th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+  <footer id="footer"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script type="module">
+    import { initPage, showMessage, nok, pct, fmtDate, escapeHtml, statusBadge } from "./js/common.js";
+
+    const { backend } = await initPage({ require: "admin", crumbs: [["Home", "index.html"], ["Admin", "admin.html"], ["Loan applications"]] });
+    let filter = "pending";
+    let loans = [];
+
+    function render() {
+      const count = (s) => loans.filter((l) => l.status === s).length;
+      const approvedSum = loans.filter((l) => l.status === "approved").reduce((s, l) => s + l.amount, 0);
+      const stat = (label, value, color) => `
+        <div class="col-6 col-md-3"><div class="card border-${color} h-100"><div class="card-body">
+          <div class="small text-body-secondary">${label}</div><div class="fs-3 fw-bold text-${color}">${value}</div>
+        </div></div></div>`;
+      document.getElementById("stats").innerHTML =
+        stat("Pending", count("pending"), "warning") + stat("Approved", count("approved"), "success") +
+        stat("Rejected", count("rejected"), "danger") + stat("Approved volume", nok(approvedSum), "primary");
+
+      const shown = filter === "all" ? loans : loans.filter((l) => l.status === filter);
+      const rows = document.getElementById("rows");
+      if (!shown.length) {
+        rows.innerHTML = `<tr><td colspan="9" class="text-center text-body-secondary py-4">No ${filter === "all" ? "" : filter} applications.</td></tr>`;
+        return;
+      }
+      rows.innerHTML = shown.map((l) => `
+        <tr>
+          <td><b>${escapeHtml(l.userName)}</b><br><span class="small text-body-secondary">${escapeHtml(l.userEmail)}</span></td>
+          <td>${escapeHtml(l.purpose)}</td>
+          <td class="text-end text-nowrap">${nok(l.amount)}</td>
+          <td class="text-end text-nowrap">${l.months} mo</td>
+          <td class="text-end text-nowrap">${nok(l.monthlyPayment)}</td>
+          <td class="text-end text-nowrap">${pct(l.effectiveRate)}</td>
+          <td class="text-end text-nowrap">${nok(l.totalCost)}</td>
+          <td class="text-nowrap">${fmtDate(l.createdAt)}</td>
+          <td>${l.status === "pending"
+            ? `<div class="d-flex gap-1 actions" data-id="${l.id}" style="min-width:300px">
+                 <input type="text" class="form-control form-control-sm" placeholder="Note (optional)" maxlength="300">
+                 <button class="btn btn-success btn-sm" data-act="approved">Approve</button>
+                 <button class="btn btn-outline-danger btn-sm" data-act="rejected">Reject</button>
+               </div>`
+            : `${statusBadge(l.status)}<div class="small text-body-secondary">${fmtDate(l.decidedAt)}${l.adminNote ? " · " + escapeHtml(l.adminNote) : ""}</div>`}
+          </td>
+        </tr>`).join("");
+    }
+
+    async function load() {
+      loans = await backend.listLoans();
+      render();
+    }
+
+    document.getElementById("filters").addEventListener("click", (e) => {
+      if (!e.target.dataset.f) return;
+      filter = e.target.dataset.f;
+      document.querySelectorAll("#filters .nav-link").forEach((b) => b.classList.toggle("active", b === e.target));
+      render();
+    });
+
+    document.getElementById("rows").addEventListener("click", async (e) => {
+      const status = e.target.dataset.act;
+      if (!status) return;
+      const box = e.target.closest(".actions");
+      box.querySelectorAll("button").forEach((b) => (b.disabled = true));
+      const msg = document.getElementById("msg");
+      try {
+        await backend.decideLoan(box.dataset.id, status, box.querySelector("input").value);
+        showMessage(msg, `Loan ${status}.`, "success");
+        await load();
+      } catch (err) {
+        showMessage(msg, err.message);
+        box.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>
